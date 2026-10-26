@@ -8,6 +8,13 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- `WIREIT_CACHE_DIR` names one local cache folder that every checkout of a
+  repo shares, including Jujutsu workspaces, which `WIREIT_CACHE_WORKTREES`
+  can't find because they have no `.git`. Each package's entries go at its path
+  within its checkout.
+
 ## [0.15.0] - 2026-10-23
 
 ### Added

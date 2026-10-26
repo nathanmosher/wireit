@@ -6,7 +6,9 @@
 
 import {test} from 'node:test';
 import * as assert from 'node:assert';
+import * as os from 'os';
 import * as pathlib from 'path';
+import {mkdtemp, rm} from 'fs/promises';
 import {realpath} from '../util/fs.js';
 import {detectWorktree, resolveCachePackageDir} from '../util/cache-root.js';
 import {FilesystemTestRig} from './util/filesystem-test-rig.js';
@@ -201,4 +203,58 @@ void test('submodule worktree keeps its own cache package dir', async () => {
     await resolveCachePackageDir(linkedPkg, {shareWorktrees: true}),
     linkedPkg,
   );
+});
+
+void test('with a cache dir, a package maps to its path within its git checkout', async () => {
+  await using rig = await FilesystemTestRig.setup();
+  await rig.mkdir(pathlib.join('checkout', 'packages', 'foo'));
+  initRepo(rig.resolve('checkout'));
+  const pkg = rig.resolve(pathlib.join('checkout', 'packages', 'foo'));
+  const cacheDir = rig.resolve('shared');
+  assert.equal(
+    await resolveCachePackageDir(pkg, {shareWorktrees: true, cacheDir}),
+    pathlib.join(cacheDir, 'packages', 'foo'),
+  );
+});
+
+void test('with a cache dir, a Jujutsu workspace is found by its .jj folder', async () => {
+  await using rig = await FilesystemTestRig.setup();
+  // A workspace from `jj workspace add` has a .jj folder and no .git.
+  await rig.mkdir(pathlib.join('workspace', '.jj'));
+  await rig.mkdir(pathlib.join('workspace', 'packages', 'foo'));
+  const pkg = rig.resolve(pathlib.join('workspace', 'packages', 'foo'));
+  const cacheDir = rig.resolve('shared');
+  assert.equal(
+    await resolveCachePackageDir(pkg, {shareWorktrees: true, cacheDir}),
+    pathlib.join(cacheDir, 'packages', 'foo'),
+  );
+});
+
+void test('with a cache dir, the checkout root maps to the cache dir itself', async () => {
+  await using rig = await FilesystemTestRig.setup();
+  await rig.mkdir(pathlib.join('workspace', '.jj'));
+  const cacheDir = rig.resolve('shared');
+  assert.equal(
+    await resolveCachePackageDir(rig.resolve('workspace'), {
+      shareWorktrees: true,
+      cacheDir,
+    }),
+    cacheDir,
+  );
+});
+
+void test('with a cache dir, a package outside any checkout keeps its own cache', async () => {
+  // The rig's temp folder is inside this repo's checkout, so use the OS's.
+  const pkg = await mkdtemp(pathlib.join(os.tmpdir(), 'wireit-loose-'));
+  try {
+    assert.equal(
+      await resolveCachePackageDir(pkg, {
+        shareWorktrees: true,
+        cacheDir: pathlib.join(pkg, 'shared'),
+      }),
+      pkg,
+    );
+  } finally {
+    await rm(pkg, {recursive: true});
+  }
 });

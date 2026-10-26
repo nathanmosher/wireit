@@ -64,6 +64,7 @@ const run = async (options: Options): Promise<Result<void, Failure[]>> => {
       const {LocalCache} = await import('./caching/local-cache.js');
       cache = new LocalCache(options.cacheMaxEntries, {
         shareWorktrees: options.cacheWorktrees,
+        cacheDir: options.cacheDir,
       });
       break;
     }

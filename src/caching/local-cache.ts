@@ -111,6 +111,7 @@ const ENTRY_LOCK_OPTIONS = {
 export class LocalCache implements Cache {
   readonly #maxEntries: number;
   readonly #shareWorktrees: boolean;
+  readonly #cacheDir: string | undefined;
 
   /** Cache package dirs used this run, whose trash {@link sweepTrash} empties. */
   readonly #packageDirs = new Set<string>();
@@ -133,11 +134,18 @@ export class LocalCache implements Cache {
   /**
    * @param maxEntries Entries to retain per script, or Infinity for all.
    * @param options When `shareWorktrees` is true, linked git worktrees write
-   * cache into the main worktree's matching `.wireit`.
+   * cache into the main worktree's matching `.wireit`. When `cacheDir` is set,
+   * every checkout writes cache under it instead, which implies the shared
+   * entry names.
    */
-  constructor(maxEntries: number, options?: {shareWorktrees?: boolean}) {
+  constructor(
+    maxEntries: number,
+    options?: {shareWorktrees?: boolean; cacheDir?: string},
+  ) {
     this.#maxEntries = maxEntries;
-    this.#shareWorktrees = options?.shareWorktrees === true;
+    this.#cacheDir = options?.cacheDir;
+    this.#shareWorktrees =
+      options?.shareWorktrees === true || this.#cacheDir !== undefined;
   }
 
   async get(
@@ -644,6 +652,7 @@ export class LocalCache implements Cache {
     if (cachePackageDir === undefined) {
       cachePackageDir = resolveCachePackageDir(packageDir, {
         shareWorktrees: true,
+        cacheDir: this.#cacheDir,
       });
       this.#cachePackageDirs.set(packageDir, cachePackageDir);
       // Forget a failed lookup. The next call tries again.

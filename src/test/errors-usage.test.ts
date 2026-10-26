@@ -174,6 +174,32 @@ void test(
 );
 
 void test(
+  'relative WIREIT_CACHE_DIR',
+  rigTest(async ({rig}) => {
+    await rig.write({
+      'package.json': {
+        scripts: {
+          main: 'wireit',
+        },
+        wireit: {
+          main: {command: 'node --version'},
+        },
+      },
+    });
+    const result = rig.exec('npm run main', {
+      env: {WIREIT_CACHE_DIR: 'shared/cache'},
+    });
+    const done = await result.exit;
+    assert.equal(done.code, 1);
+    assert.ok(
+      done.stderr.includes(
+        `❌ [main] Invalid usage: Expected the WIREIT_CACHE_DIR env variable to be an absolute path, got "shared/cache"`,
+      ),
+    );
+  }),
+);
+
+void test(
   'fractional WIREIT_MAX_OPEN_FILES',
   rigTest(async ({rig}) => {
     await rig.write({

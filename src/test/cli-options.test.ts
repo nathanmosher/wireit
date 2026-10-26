@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import * as os from 'os';
 import * as pathlib from 'path';
 import {test} from 'node:test';
 import * as assert from 'node:assert';
@@ -621,6 +622,48 @@ for (const {agent, runCmd, testCmd, startCmd, needsExtraDashes} of commands) {
         },
         {
           WIREIT_CACHE_WORKTREES: 'true',
+        },
+      );
+    }),
+  );
+
+  void test(
+    `${agent} WIREIT_CACHE_DIR=<absolute path>`,
+    rigTest(async ({rig}) => {
+      await assertOptions(
+        rig,
+        `${runCmd} main ${extraDashes}`,
+        {
+          agent,
+          script: {
+            packageDir: rig.temp,
+            name: 'main',
+          },
+          cacheDir: rig.resolve('shared'),
+        },
+        {
+          WIREIT_CACHE_DIR: rig.resolve('shared'),
+        },
+      );
+    }),
+  );
+
+  void test(
+    `${agent} WIREIT_CACHE_DIR=~/<path> is under the home folder`,
+    rigTest(async ({rig}) => {
+      await assertOptions(
+        rig,
+        `${runCmd} main ${extraDashes}`,
+        {
+          agent,
+          script: {
+            packageDir: rig.temp,
+            name: 'main',
+          },
+          cacheDir: pathlib.join(os.homedir(), '.cache', 'wireit'),
+        },
+        {
+          WIREIT_CACHE_DIR: '~/.cache/wireit',
         },
       );
     }),

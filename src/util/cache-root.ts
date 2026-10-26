@@ -19,15 +19,28 @@ export interface WorktreeInfo {
  * Linked git worktrees share the main worktree only when `shareWorktrees` is
  * true. Otherwise `packageDir` (Wireit's historical layout). A package also
  * keeps its own cache until the main worktree has the package.
+ *
+ * With `cacheDir`, every checkout shares that folder instead: a package's
+ * cache goes at its path within its checkout, under `cacheDir`. A package
+ * outside any checkout keeps its own cache.
  */
 export const resolveCachePackageDir = async (
   packageDir: string,
-  options?: {shareWorktrees?: boolean},
+  options?: {shareWorktrees?: boolean; cacheDir?: string},
 ): Promise<string> => {
   if (options?.shareWorktrees !== true) {
     return packageDir;
   }
   const absPackageDir = pathlib.resolve(packageDir);
+  if (options.cacheDir !== undefined) {
+    const checkoutRoot = await findCheckoutRoot(absPackageDir);
+    return checkoutRoot === undefined
+      ? absPackageDir
+      : pathlib.join(
+          options.cacheDir,
+          pathlib.relative(checkoutRoot, absPackageDir),
+        );
+  }
   const worktree = await detectWorktree(absPackageDir);
   if (
     worktree === undefined ||
@@ -76,6 +89,20 @@ export const detectWorktree = async (
     return undefined;
   }
   return {worktreeRoot, mainWorktreeRoot};
+};
+
+/**
+ * Nearest folder holding `.git` or `.jj`: a git checkout or worktree, or a
+ * Jujutsu workspace, which has no `.git` unless it is colocated.
+ */
+const findCheckoutRoot = async (dir: string): Promise<string | undefined> => {
+  for (const marker of ['.git', '.jj']) {
+    if ((await lstatOrUndefined(pathlib.join(dir, marker))) !== undefined) {
+      return dir;
+    }
+  }
+  const parent = pathlib.dirname(dir);
+  return parent === dir ? undefined : findCheckoutRoot(parent);
 };
 
 const findGitAncestor = async (dir: string): Promise<string | undefined> => {

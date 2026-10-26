@@ -65,6 +65,11 @@ export interface Options {
   cache: 'local' | 'github' | 'none';
   cacheMaxEntries: number;
   cacheWorktrees: boolean;
+  /**
+   * Folder that holds the local cache of every checkout, from
+   * WIREIT_CACHE_DIR. Unset keeps each package's cache in its own `.wireit`.
+   */
+  cacheDir?: string;
   failureMode: FailureMode;
   agent: Agent;
   logger: Logger;
@@ -224,6 +229,36 @@ export const getOptions = async (): Promise<Result<Options>> => {
   // Same rule as CI: only the exact string "true" enables it.
   const cacheWorktrees = process.env['WIREIT_CACHE_WORKTREES'] === 'true';
 
+  const cacheDirResult = ((): Result<string | undefined> => {
+    const str = process.env['WIREIT_CACHE_DIR'] ?? '';
+    if (str === '') {
+      return {ok: true, value: undefined};
+    }
+    // A leading "~" is the home folder, so the variable can be set from
+    // config files that don't expand it, such as an editor's or agent's
+    // settings.
+    const expanded = str.replace(/^~(?=$|[\\/])/, os.homedir());
+    // npm runs each script in its own package's folder, so a relative path
+    // would name a different folder for each package.
+    if (!pathlib.isAbsolute(expanded)) {
+      return {
+        ok: false,
+        error: {
+          reason: 'invalid-usage',
+          message:
+            `Expected the WIREIT_CACHE_DIR env variable to be ` +
+            `an absolute path, got ${JSON.stringify(str)}`,
+          script,
+          type: 'failure',
+        },
+      };
+    }
+    return {ok: true, value: pathlib.normalize(expanded)};
+  })();
+  if (!cacheDirResult.ok) {
+    return cacheDirResult;
+  }
+
   const failureModeResult = ((): Result<FailureMode> => {
     const str = process.env['WIREIT_FAILURES'];
     if (!str) {
@@ -312,6 +347,9 @@ export const getOptions = async (): Promise<Result<Options>> => {
       cache: cacheResult.value,
       cacheMaxEntries: cacheMaxEntriesResult.value,
       cacheWorktrees,
+      ...(cacheDirResult.value === undefined
+        ? {}
+        : {cacheDir: cacheDirResult.value}),
       failureMode: failureModeResult.value,
       agent,
       logger,

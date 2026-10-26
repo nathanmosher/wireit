@@ -664,3 +664,66 @@ void test(
     assert.equal(await rig.read('output'), 'v0');
   }),
 );
+
+// Two checkouts of one repo, such as Jujutsu workspaces, which have a .jj
+// folder and no .git. With WIREIT_CACHE_DIR they share one cache.
+const writeCheckouts = async (rig: WireitTestRig) => {
+  const cmdA = await rig.newCommand();
+  const pkg = {
+    scripts: {a: 'wireit'},
+    wireit: {
+      a: {command: cmdA.command, files: ['input'], output: ['output']},
+    },
+  };
+  for (const checkout of ['one', 'two']) {
+    await rig.mkdir(pathlib.join(checkout, '.jj'));
+    await rig.write({
+      [`${checkout}/package.json`]: pkg,
+      [`${checkout}/input`]: 'v0',
+    });
+  }
+  return cmdA;
+};
+
+void test(
+  "WIREIT_CACHE_DIR lets a second checkout restore the first checkout's output",
+  rigTest(async ({rig}) => {
+    const cmdA = await writeCheckouts(rig);
+    rig.env = {...rig.env, WIREIT_CACHE_DIR: rig.resolve('shared')};
+
+    const first = rig.exec('npm run a', {cwd: 'one'});
+    const inv = await cmdA.nextInvocation();
+    await rig.write({'one/output': 'v0'});
+    inv.exit(0);
+    assert.equal((await first.exit).code, 0);
+    const second = rig.exec('npm run a', {cwd: 'two'});
+
+    assert.equal((await second.exit).code, 0);
+    assert.equal(cmdA.numInvocations, 1);
+    assert.equal(await rig.read('two/output'), 'v0');
+    const sharedEntries = await fs.readdir(
+      pathlib.join(
+        getScriptDataDir({packageDir: rig.resolve('shared'), name: 'a'}),
+        'cache',
+      ),
+    );
+    assert.equal(sharedEntries.length, 1);
+  }),
+);
+
+void test(
+  'without WIREIT_CACHE_DIR, a second checkout runs the script again',
+  rigTest(async ({rig}) => {
+    const cmdA = await writeCheckouts(rig);
+
+    for (const checkout of ['one', 'two']) {
+      const exec = rig.exec('npm run a', {cwd: checkout});
+      const inv = await cmdA.nextInvocation();
+      await rig.write({[`${checkout}/output`]: 'v0'});
+      inv.exit(0);
+      assert.equal((await exec.exit).code, 0);
+    }
+
+    assert.equal(cmdA.numInvocations, 2);
+  }),
+);
